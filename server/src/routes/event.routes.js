@@ -7,10 +7,11 @@ const router = express.Router();
 /* 🔥 SPECIFIC ROUTES FIRST */
 router.get("/mine", requireAuth, EventController.myEvents);
 
+/* CATEGORIES */
+router.get("/categories", EventController.getCategories);
+
 /* PUBLIC ROUTES */
 router.get("/", EventController.getPublic);
-router.get("/", EventController.getPublicEvents);
-// router.get("/", authOptional, EventController.getPublicEvents);
 router.get("/:id", EventController.getOne);
 
 /* ORGANIZER ACTIONS */

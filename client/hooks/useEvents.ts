@@ -37,7 +37,7 @@ export interface EventWithOrganizer extends Event {
 ========================= */
 
 export function useEvents(filters?: {
-  category?: string;
+  categoryId?: string;
   priceMin?: number;
   priceMax?: number;
   searchQuery?: string;
@@ -53,7 +53,7 @@ export function useEvents(filters?: {
       
 
       const data = await api.getPublicEvents({
-        category: filters?.category,
+        categoryId: filters?.categoryId,
         priceMin: filters?.priceMin,
         priceMax: filters?.priceMax,
         searchQuery: filters?.searchQuery,

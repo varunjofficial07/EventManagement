@@ -14,6 +14,9 @@ importers:
       dotenv:
         specifier: ^17.2.1
         version: 17.2.1
+      expres:
+        specifier: ^0.0.5
+        version: 0.0.5
       express:
         specifier: ^5.1.0
         version: 5.1.0
@@ -1910,6 +1913,9 @@ packages:
   expect-type@1.2.2:
     resolution: {integrity: sha512-JhFGDVJ7tmDJItKhYgJCGLOWjuK9vPxiXoUFLwLDc99NlmklilbiQJwoctZtt13+xMw91MCk/REan6MWHqDjyA==}
     engines: {node: '>=12.0.0'}
+
+  expres@0.0.5:
+    resolution: {integrity: sha512-pK2yFc2Ke66rveH6iq6YJr63v55cFP6fs2xhoJ7RUGg+uwwApMlod3IwVm8zEtKH4ALqSvaGQF4cNemsyApd/w==}
 
   express@5.1.0:
     resolution: {integrity: sha512-DT9ck5YIRU+8GYzzU5kT3eHGA5iL+1Zd0EutOmTE9Dtk+Tvuzd23VBU+ec7HPNSTxXYO55gPV/hq4pSBJDjFpA==}
@@ -4652,6 +4658,8 @@ snapshots:
   eventemitter3@4.0.7: {}
 
   expect-type@1.2.2: {}
+
+  expres@0.0.5: {}
 
   express@5.1.0:
     dependencies:

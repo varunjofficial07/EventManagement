@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import Layout from "@/components/Layout";
 import EventCard from "@/components/EventCard";
@@ -49,37 +49,87 @@ const transformEventForCard = (event: Event) => ({
   price: event.price,
 });
 
-type Category = "all" | "tech" | "music" | "workshop" | "business";
+type Category = { id: string; name: string };
 
 export default function BrowseEvents() {
   const [searchParams] = useSearchParams();
   const urlSearch = searchParams.get("search") || "";
   
+  // `rawSearch` is bound to the input; `searchQuery` is debounced and used for API calls
+  const [rawSearch, setRawSearch] = useState(urlSearch);
   const [searchQuery, setSearchQuery] = useState(urlSearch);
-  const [selectedCategory, setSelectedCategory] = useState<Category>("all");
-  const [priceRange, setPriceRange] = useState([0, 500]);
+  // selectedCategoryId: 'all' means no filter.
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("all");
+  // `null` means "no price filter" — avoid sending a default range to the API
+  const [priceRange, setPriceRange] = useState<number[] | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([{ id: "all", name: "All" }]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [categoriesError, setCategoriesError] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
 
   // Use the useEvents hook with filters
   const { events, loading, error } = useEvents({
-    category: selectedCategory !== "all" ? selectedCategory : undefined,
-    priceMin: priceRange[0],
-    priceMax: priceRange[1],
+    categoryId: selectedCategoryId !== "all" ? selectedCategoryId : undefined,
+    priceMin: priceRange ? priceRange[0] : undefined,
+    priceMax: priceRange ? priceRange[1] : undefined,
     searchQuery: searchQuery || undefined,
   });
+
+  // Debounce rawSearch -> searchQuery to avoid rapid API calls
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(rawSearch), 350);
+    return () => clearTimeout(t);
+  }, [rawSearch]);
 
   // Update search query when URL param changes
   useEffect(() => {
     if (urlSearch) {
+      setRawSearch(urlSearch);
       setSearchQuery(urlSearch);
     }
   }, [urlSearch]);
 
-  // Filter events by price range (client-side since useEvents doesn't support it fully)
-  const filteredEvents = events.filter((event) => {
-    return event.price >= priceRange[0] && event.price <= priceRange[1];
+  // Defensive: ensure `events` is an array
+  const safeEvents = Array.isArray(events) ? events : [];
+
+  // Derive category list from events for dynamic filters
+  // Fetch categories from API once (with retry support)
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchCategories = async () => {
+      try {
+        setCategoriesLoading(true);
+        setCategoriesError(null);
+        const data = await (await import("@/lib/api")).api.getCategories();
+        if (!mounted) return;
+        const list = Array.isArray(data) ? data : [];
+        // Expect categories to be objects { id, name } from the API
+        const normalized = list.map((c: any) => ({ id: c.id, name: c.name }));
+        setCategories([{ id: "all", name: "All" }, ...normalized]);
+      } catch (err) {
+        console.error("Error fetching categories:", err);
+        if (!mounted) return;
+        setCategoriesError(err);
+      } finally {
+        if (!mounted) return;
+        setCategoriesLoading(false);
+      }
+    };
+
+    fetchCategories();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Filter events by price range (client-side). If priceRange is null, don't filter.
+  const filteredEvents = safeEvents.filter((event) => {
+    if (!priceRange) return true;
+    const price = typeof event.price === 'number' ? event.price : Number(event.price || 0);
+    return price >= priceRange[0] && price <= priceRange[1];
   });
 
   const totalPages = Math.ceil(filteredEvents.length / itemsPerPage);
@@ -90,8 +140,8 @@ export default function BrowseEvents() {
 
   const handleClearFilters = () => {
     setSearchQuery("");
-    setSelectedCategory("all");
-    setPriceRange([0, 500]);
+    setSelectedCategoryId("all");
+    setPriceRange(null);
     setCurrentPage(1);
   };
 
@@ -117,9 +167,9 @@ export default function BrowseEvents() {
               <input
                 type="text"
                 placeholder="Search events, locations..."
-                value={searchQuery}
+                value={rawSearch}
                 onChange={(e) => {
-                  setSearchQuery(e.target.value);
+                  setRawSearch(e.target.value);
                   setCurrentPage(1);
                 }}
                 className="w-full pl-12 pr-4 py-3 rounded-lg border-2 border-border focus:border-primary-600 focus:outline-none"
@@ -141,22 +191,59 @@ export default function BrowseEvents() {
               <div>
                 <h3 className="font-semibold text-lg mb-4">Category</h3>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                  {["all", "tech", "music", "workshop", "business"].map((cat) => (
-                    <button
-                      key={cat}
-                      onClick={() => {
-                        setSelectedCategory(cat as Category);
-                        setCurrentPage(1);
-                      }}
-                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                        selectedCategory === cat
-                          ? "bg-primary-600 text-white"
-                          : "bg-muted hover:bg-muted/70"
-                      }`}
-                    >
-                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                    </button>
-                  ))}
+                  {categoriesLoading ? (
+                    // Placeholder loading buttons
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="h-10 bg-muted/50 rounded-lg animate-pulse"
+                      />
+                    ))
+                  ) : categoriesError ? (
+                    <div className="col-span-2 md:col-span-5 flex items-center gap-4">
+                      <p className="text-sm text-red-500">
+                        Failed to load categories
+                      </p>
+                      <button
+                        onClick={() => {
+                          // trigger re-fetch by toggling loading state and re-running effect
+                          setCategoriesLoading(true);
+                          setCategoriesError(null);
+                          (async () => {
+                            try {
+                              const data = await (await import("@/lib/api")).api.getCategories();
+                              setCategories(["all", ...(Array.isArray(data) ? data : [])]);
+                            } catch (err) {
+                              console.error(err);
+                              setCategoriesError(err);
+                            } finally {
+                              setCategoriesLoading(false);
+                            }
+                          })();
+                        }}
+                        className="px-3 py-2 bg-primary-600 text-white rounded-lg text-sm"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : (
+                    categories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => {
+                          setSelectedCategoryId(cat.id);
+                          setCurrentPage(1);
+                        }}
+                        className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                          selectedCategoryId === cat.id
+                            ? "bg-primary-600 text-white"
+                            : "bg-muted hover:bg-muted/70"
+                        }`}
+                      >
+                        {cat.name.charAt(0).toUpperCase() + cat.name.slice(1)}
+                      </button>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -169,16 +256,17 @@ export default function BrowseEvents() {
                     min="0"
                     max="500"
                     step="10"
-                    value={priceRange[1]}
+                    value={priceRange ? priceRange[1] : 500}
                     onChange={(e) => {
-                      setPriceRange([priceRange[0], parseInt(e.target.value)]);
+                      const val = parseInt(e.target.value);
+                      setPriceRange((prev) => (prev ? [prev[0], val] : [0, val]));
                       setCurrentPage(1);
                     }}
                     className="w-full"
                   />
                   <div className="flex justify-between text-sm">
-                    <span>${priceRange[0]}</span>
-                    <span>${priceRange[1]}</span>
+                    <span>${priceRange ? priceRange[0] : 0}</span>
+                    <span>${priceRange ? priceRange[1] : 500}</span>
                   </div>
                 </div>
               </div>

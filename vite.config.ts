@@ -1,7 +1,17 @@
 import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { createServer } from "./server";
+
+// Only import createServer during dev mode
+let createServer: any;
+try {
+  if (process.env.NODE_ENV !== "production") {
+    const serverModule = await import("./server");
+    createServer = serverModule.createServer;
+  }
+} catch (e) {
+  // Server may not be available in all contexts
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({

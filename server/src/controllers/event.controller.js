@@ -2,58 +2,79 @@ import { EventService } from "../services/event.service.js";
 
 export const EventController = {
   async getPublic(req, res) {
-    const { data, error } = await EventService.getPublicEvents(req.query);
-    if (error) return res.status(400).json({ message: error.message });
-    res.json(data);
+    try {
+      const filters = {
+        categoryId: req.query.category_id,
+        search: req.query.search,
+        priceMin: req.query.priceMin ? parseInt(req.query.priceMin) : undefined,
+        priceMax: req.query.priceMax ? parseInt(req.query.priceMax) : undefined,
+      };
+
+      const events = await EventService.getPublicEvents(filters);
+      res.status(200).json(events || []);
+    } catch (err) {
+      console.error("Error fetching public events:", err);
+      res.status(500).json({
+        message: err.message || "Failed to fetch events",
+      });
+    }
   },
 
   async getOne(req, res) {
-    const { data, error } = await EventService.getEvent(req.params.id);
-    if (error) return res.status(404).json({ message: "Event not found" });
-    res.json(data);
+    try {
+      const event = await EventService.getEvent(req.params.id);
+      if (!event) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+      res.json(event);
+    } catch (err) {
+      res.status(404).json({ message: "Event not found" });
+    }
+  },
+
+  async getCategories(req, res) {
+    try {
+      const categories = await EventService.getCategories();
+      res.status(200).json(categories || []);
+    } catch (err) {
+      console.error("Error fetching categories:", err);
+      res.status(500).json({ message: err.message || "Failed to fetch categories" });
+    }
   },
 
   async myEvents(req, res) {
-    const { data } = await EventService.getMyEvents(req.user);
-    res.json(data);
+    try {
+      const events = await EventService.getMyEvents(req.user);
+      res.json(events || []);
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
   },
 
   async create(req, res) {
     try {
       const result = await EventService.createEvent(req.user, req.body);
-      res.status(201).json(result.data);
+      res.status(201).json(result);
     } catch (err) {
       res.status(400).json({ message: err.message });
     }
   },
 
   async update(req, res) {
-    await EventService.updateEvent(req.user, req.params.id, req.body);
-    res.json({ message: "Event updated" });
+    try {
+      const result = await EventService.updateEvent(req.user, req.params.id, req.body);
+      res.json({ message: "Event updated", data: result });
+    } catch (err) {
+      res.status(400).json({ message: err.message });
+    }
   },
 
   async remove(req, res) {
-    await EventService.deleteEvent(req.user, req.params.id);
-    res.json({ message: "Event deleted" });
-  },
-async getPublicEvents(req, res) {
     try {
-      const filters = {
-        category: req.query.category,
-        search: req.query.search,
-        priceMin: req.query.priceMin,
-        priceMax: req.query.priceMax,
-      };
-
-      const events = await EventService.getPublicEvents(filters);
-
-      // ✅ ALWAYS return JSON (even if empty)
-      return res.status(200).json(events || []);
+      await EventService.deleteEvent(req.user, req.params.id);
+      res.json({ message: "Event deleted" });
     } catch (err) {
-      console.error(err);
-      return res.status(500).json({
-        message: err.message || "Failed to fetch events",
-      });
+      res.status(400).json({ message: err.message });
     }
   },
 };

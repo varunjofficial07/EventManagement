@@ -43,11 +43,37 @@ export const EventService = {
   },
 
   getPublicEvents(filters) {
-    return EventModel.getPublic(filters);
+    return (async () => {
+      const { data, error } = await EventModel.getPublic(filters);
+      if (error) throw error;
+      return data;
+    })();
   },
 
-  getEvent(id) {
-    return EventModel.getById(id);
+  async getCategories() {
+    // Return canonical categories (id + name) from categories table.
+    // Do NOT fall back to text-based event.category (schema removed).
+    try {
+      const { data: catData, error: catErr } = await supabase
+        .from("categories")
+        .select("id, name")
+        .order("name", { ascending: true });
+
+      if (catErr) throw catErr;
+      if (!Array.isArray(catData)) return [];
+
+      // Return array of objects { id, name }
+      return catData.map((c) => ({ id: c.id, name: c.name }));
+    } catch (err) {
+      console.error("Error fetching categories:", err?.message || err);
+      return [];
+    }
+  },
+
+  async getEvent(id) {
+    const { data, error } = await EventModel.getById(id);
+    if (error) throw error;
+    return data;
   },
 
   async getMyEvents(user) {
@@ -57,7 +83,9 @@ export const EventService = {
       throw new Error("Only organizers can view their events");
     }
 
-    return EventModel.getByOrganizer(user.id);
+    const { data, error } = await EventModel.getByOrganizer(user.id);
+    if (error) throw error;
+    return data;
   },
 
   async updateEvent(user, id, updates) {
@@ -67,7 +95,9 @@ export const EventService = {
       throw new Error("Only organizers can update events");
     }
 
-    return EventModel.update(id, user.id, updates);
+    const { data, error } = await EventModel.update(id, user.id, updates);
+    if (error) throw error;
+    return data;
   },
 
   async deleteEvent(user, id) {
@@ -77,10 +107,9 @@ export const EventService = {
       throw new Error("Only organizers can delete events");
     }
 
-    return EventModel.delete(id, user.id);
-  },
-  async getPublicEvents(filters) {
-    return EventModel.getPublic(filters);
+    const { data, error } = await EventModel.delete(id, user.id);
+    if (error) throw error;
+    return data;
   },
   
 };

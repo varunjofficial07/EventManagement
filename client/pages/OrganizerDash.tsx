@@ -39,6 +39,8 @@ export default function OrganizerDash() {
     price: "",
     category: "tech",
   });
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const handleEditEvent = (event: any) => {
   setEditingEventId(event.id);
 
@@ -84,10 +86,37 @@ export default function OrganizerDash() {
 
     setSubmitting(true);
 
+    // If an image was selected, upload to Supabase Storage and get public URL
+    let imageUrl: string | undefined = undefined;
+    if (imageFile) {
+      try {
+        setUploadingImage(true);
+        const { supabase } = await import("@/lib/supabase");
+        const filePath = `events/${Date.now()}_${imageFile.name}`;
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from("events")
+          .upload(filePath, imageFile, { cacheControl: "3600", upsert: false });
+
+        if (uploadErr) {
+          console.error("Supabase upload error:", uploadErr);
+          alert("Image upload failed");
+        } else {
+          const { data: urlData } = await supabase.storage.from("events").getPublicUrl(filePath);
+          imageUrl = urlData.publicUrl;
+        }
+      } catch (e) {
+        console.error("Image upload exception:", e);
+        alert("Image upload failed");
+      } finally {
+        setUploadingImage(false);
+      }
+    }
+
     const res = await createEvent(token, {
       ...formData,
       total_capacity: Number(formData.total_capacity),
       price: Number(formData.price),
+      ...(imageUrl ? { image_url: imageUrl } : {}),
     });
 
     setSubmitting(false);
@@ -109,6 +138,7 @@ export default function OrganizerDash() {
       price: "",
       category: "tech",
     });
+    setImageFile(null);
 
     refetch();
   };
@@ -302,6 +332,30 @@ export default function OrganizerDash() {
                     setFormData({ ...formData, price: e.target.value })
                   }
                 />
+                {/* Image upload */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium mb-2">Event Image</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const f = e.target.files && e.target.files[0];
+                      if (!f) return;
+                      if (!f.type.startsWith("image/")) {
+                        alert("Please select an image file");
+                        return;
+                      }
+                      if (f.size > 5 * 1024 * 1024) {
+                        alert("Image must be 5MB or smaller");
+                        return;
+                      }
+                      setImageFile(f);
+                    }}
+                  />
+                  {imageFile && (
+                    <p className="text-sm text-muted-foreground mt-2">Selected: {imageFile.name}</p>
+                  )}
+                </div>
                 <textarea
                   className="col-span-2"
                   placeholder="Description"

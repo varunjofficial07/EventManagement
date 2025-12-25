@@ -1,19 +1,24 @@
 import { supabase } from "../config/supabaseClient.js";
 
 export const EventModel = {
-  getPublic(filters) {
-    let query = supabase
-      .from("events")
-      .select("*")
-      // .in("status", ["approved", "active"])
-      // .order("date", { ascending: true });
+  async getPublic(filters) {
+    try {
+      let query = supabase.from("events").select("*");
 
-    if (filters?.category) query.eq("category", filters.category);
-    if (filters?.q) query.ilike("title", `%${filters.q}%`);
-    if (filters?.priceMin) query.gte("price", filters.priceMin);
-    if (filters?.priceMax) query.lte("price", filters.priceMax);
+      // Category filter: only support category_id (UUID)
+      if (filters?.categoryId) {
+        const catId = String(filters.categoryId).trim();
+        query = query.eq("category_id", catId);
+      }
 
-    return query;
+      if (filters?.search) query = query.ilike("title", `%${filters.search}%`);
+      if (filters?.priceMin !== undefined) query = query.gte("price", filters.priceMin);
+      if (filters?.priceMax !== undefined) query = query.lte("price", filters.priceMax);
+
+      return await query.order("date", { ascending: true });
+    } catch (err) {
+      return { data: null, error: err };
+    }
   },
 
   getById(id) {
@@ -46,24 +51,5 @@ export const EventModel = {
       .delete()
       .eq("id", id)
       .eq("organizer_id", organizerId);
-  },
-  async getPublic({ category, search, priceMin, priceMax }) {
-    let query = supabase
-      .from("events")
-      .select("*")
-      // .eq("status", "approved")
-      // .gt("available_seats", 0);
-
-    if (category) query = query.eq("category", category);
-    if (search)
-      query = query.ilike("title", `%${search}%`);
-
-    if (priceMin) query = query.gte("price", priceMin);
-    if (priceMax) query = query.lte("price", priceMax);
-
-    const { data, error } = await query.order("date", { ascending: true });
-    if (error) throw error;
-
-    return data;
   },
 };
